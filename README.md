@@ -1,8 +1,12 @@
 # reparatio — CLI
 
+> **Alpha software.** Commands, options, and output formats may change without notice between versions.
+
 Command-line tool for the [Reparatio](https://reparatio.app) data conversion API.
 
 Convert, inspect, merge, append, and query CSV, Excel, Parquet, JSON, GeoJSON, SQLite, and 30+ other formats directly from your terminal.
+
+**See also:** [reparatio-mcp](https://github.com/jfrancis42/reparatio-mcp) (MCP server for AI assistants) · [reparatio-sdk](https://github.com/jfrancis42/reparatio-sdk) (Python SDK)
 
 ---
 
@@ -45,6 +49,22 @@ reparatio convert sales.csv sales.parquet
 
 ---
 
+## Pricing
+
+| Plan | Price | Max file | Formats | API / CLI / MCP |
+|---|---|---|---|---|
+| Free (anonymous) | $0 | 10 MB | Basic (csv, tsv, xlsx, json, jsonl, parquet) | No |
+| Free (registered) | $0 | 10 MB | Basic | No |
+| Standard | $29/month | 500 MB | All formats | No |
+| Professional | $79/month | 2 GB | All formats + Fixed-Width + EBCDIC | Yes |
+| Credits | $10 = 25 conversions | 500 MB | All formats (no API/FWF/EBCDIC) | No |
+
+**The Professional plan is required to use the CLI, REST API, Python/JS SDKs, MCP server, Fixed-Width parser, and EBCDIC encoding support.**
+
+Get an API key at [reparatio.app](https://reparatio.app).
+
+---
+
 ## Authentication
 
 The API key can be configured in three ways, in order of precedence:
@@ -77,7 +97,7 @@ Show subscription details for the current API key.
 $ reparatio me
 
   Email      alice@example.com
-  Plan       monthly
+  Plan       pro
   Active     yes
   API access yes
   Expires    2026-04-01T00:00:00Z
@@ -156,6 +176,10 @@ reparatio convert huge.csv sample.csv --sample-frac 0.05
 # Encoding issues (legacy Windows CSV)
 reparatio convert legacy.csv fixed.xlsx
 
+# EBCDIC mainframe file (cp037 = EBCDIC US, cp500 = EBCDIC International)
+reparatio convert mainframe.dat output.csv --encoding cp037
+reparatio convert ibm.dat output.csv --encoding cp500
+
 # Read a specific Excel sheet
 reparatio convert workbook.xlsx q3.csv --sheet Q3
 
@@ -179,6 +203,60 @@ reparatio convert data.csv data.parquet    # already compressed by Parquet
 | `--sample-n N` | Random sample of N rows |
 | `--sample-frac F` | Random sample fraction (e.g. `0.1` for 10%) |
 | `--geometry-column TEXT` | WKT geometry column for GeoJSON output |
+| `--null-values TEXT` | Comma-separated strings to treat as null, e.g. `"N/A,NULL,-"` |
+| `--cast COL=TYPE[:FORMAT]` | Override a column type (repeatable) |
+| `--encoding TEXT` | Force a specific encoding (bypasses auto-detection), e.g. `cp037` for EBCDIC US, `cp500` for EBCDIC International |
+
+**`--null-values` example:**
+
+```bash
+# Treat "N/A", "NULL", and "-" as null values when loading
+reparatio convert legacy.csv clean.parquet --null-values "N/A,NULL,-"
+```
+
+**`--cast` examples:**
+
+```bash
+# Cast price to Float64
+reparatio convert data.csv out.parquet --cast price=Float64
+
+# Parse dates in day/month/year format
+reparatio convert data.csv out.parquet --cast date=Date:"%d/%m/%Y"
+
+# Multiple overrides
+reparatio convert data.csv out.parquet --cast price=Float64 --cast qty=Int32
+```
+
+Supported types: `String`, `Int8`–`Int64`, `UInt8`–`UInt64`, `Float32`, `Float64`,
+`Boolean`, `Date` (optionally `Date:FORMAT`), `Datetime` (optionally `Datetime:FORMAT`), `Time`.
+
+---
+
+### `reparatio batch-convert ZIP_FILE`
+
+Convert every file inside a ZIP archive to a common format.
+Returns a ZIP of converted files. Files that cannot be parsed are skipped with a warning.
+
+```bash
+reparatio batch-convert monthly_reports.zip --format parquet
+reparatio batch-convert raw_data.zip --format csv.gz -o processed.zip
+reparatio batch-convert data.zip --format parquet --cast price=Float64
+```
+
+**Options:**
+
+| Option | Description |
+|---|---|
+| `--format TEXT` | Output format (required) |
+| `--output FILE` | Output ZIP path (default: `converted.zip`) |
+| `--no-header` | Treat first row as data |
+| `--no-fix-encoding` | Disable encoding repair |
+| `--delimiter TEXT` | Custom delimiter |
+| `--select col1,col2` | Columns to include from every file |
+| `--deduplicate` | Remove duplicate rows from each file |
+| `--sample-n N` | Random sample of N rows per file |
+| `--sample-frac F` | Random sample fraction per file |
+| `--cast COL=TYPE[:FORMAT]` | Column type override (repeatable) |
 
 ---
 

@@ -12,6 +12,7 @@ from rich.table import Table
 
 from .api import (
     api_append,
+    api_batch_convert,
     api_convert,
     api_formats,
     api_inspect,
@@ -110,7 +111,11 @@ def key_clear() -> None:
 
 @main.command()
 def me() -> None:
-    """Show subscription details for the current API key."""
+    """Show subscription details for the current API key.
+
+    Plans: standard ($29/mo), pro ($79/mo), credits_25 (pay-as-you-go).
+    API, CLI, MCP, Fixed-Width, and EBCDIC features require the Professional plan.
+    """
     k = _require_key()
     data = api_me(k)
     t = Table(show_header=False, box=None, padding=(0, 2))
@@ -238,6 +243,13 @@ def inspect(
 @click.option("--sample-n", default=0, help="Random sample of N rows.")
 @click.option("--sample-frac", default=0.0, help="Random sample fraction (e.g. 0.1).")
 @click.option("--geometry-column", default="geometry")
+@click.option("--null-values", "null_values", default="",
+              help='Comma-separated strings to treat as null, e.g. "N/A,NULL,-".')
+@click.option("--cast", "cast_specs", multiple=True,
+              metavar="COL=TYPE[:FORMAT]",
+              help='Override a column type. Repeatable. E.g. --cast price=Float64 --cast date=Date:"%d/%m/%%Y"')
+@click.option("--encoding", "encoding_override", default="",
+              help="Encoding override, e.g. cp037 for EBCDIC US, cp500 for EBCDIC International.")
 def convert(
     input_path: Path,
     output_arg: Optional[str],
@@ -252,6 +264,9 @@ def convert(
     sample_n: int,
     sample_frac: float,
     geometry_column: str,
+    null_values: str,
+    cast_specs: tuple,
+    encoding_override: str,
 ) -> None:
     """Convert INPUT to a different format.
 
@@ -265,6 +280,7 @@ def convert(
         reparatio convert report.xlsx --format csv.gz
         reparatio convert data.csv out.csv --select date,region,revenue
         reparatio convert legacy.csv fixed.csv --no-fix-encoding
+        reparatio convert data.csv out.parquet --cast price=Float64 --cast date=Date:"%d/%m/%Y"
     """
     k = _require_key()
 
@@ -295,6 +311,20 @@ def convert(
     sel = json.dumps([c.strip() for c in select_columns.split(",") if c.strip()]) if select_columns else "[]"
     cols = json.dumps([c.strip() for c in columns.split(",") if c.strip()]) if columns else "[]"
 
+    cast_dict: dict = {}
+    for spec in cast_specs:
+        if "=" not in spec:
+            err.print(f"[red]Invalid --cast value:[/] {spec!r}  (expected COL=TYPE or COL=TYPE:FORMAT)")
+            sys.exit(1)
+        col_name, rest = spec.split("=", 1)
+        if ":" in rest:
+            typ, fmt = rest.split(":", 1)
+            cast_dict[col_name] = {"type": typ, "format": fmt}
+        else:
+            cast_dict[col_name] = {"type": rest}
+
+    null_vals = json.dumps([v.strip() for v in null_values.split(",") if v.strip()]) if null_values else "[]"
+
     written, warning = api_convert(
         k, input_path, target_format, output_path,
         no_header=no_header,
@@ -307,6 +337,9 @@ def convert(
         sample_n=sample_n,
         sample_frac=sample_frac,
         geometry_column=geometry_column,
+        null_values=null_vals,
+        cast_columns=json.dumps(cast_dict),
+        encoding_override=encoding_override,
     )
     out.print(f"[green]Saved:[/] {written}")
     if warning:
@@ -467,3 +500,86 @@ def query(
         sheet=sheet,
     )
     out.print(f"[green]Saved:[/] {written}")
+
+
+# ---------------------------------------------------------------------------
+# batch-convert
+# ---------------------------------------------------------------------------
+
+
+@main.command("batch-convert")
+@click.argument("zip_file", type=click.Path(exists=True, dir_okay=False, path_type=Path))
+@click.option("--format", "-f", "target_format", required=True, help="Output format for all files (e.g. parquet, csv.gz).")
+@click.option("--output", "-o", "output_arg", default=None, help="Output ZIP path (default: converted.zip in same directory).")
+@click.option("--no-header", is_flag=True)
+@click.option("--no-fix-encoding", is_flag=True)
+@click.option("--delimiter", "-d", default="")
+@click.option("--select", "select_columns", default="", help="Comma-separated columns to include.")
+@click.option("--deduplicate", is_flag=True)
+@click.option("--sample-n", default=0, help="Random sample of N rows per file.")
+@click.option("--sample-frac", default=0.0, help="Random sample fraction per file (e.g. 0.1).")
+@click.option("--cast", "cast_specs", multiple=True,
+              metavar="COL=TYPE[:FORMAT]",
+              help="Override a column type. Repeatable.")
+def batch_convert(
+    zip_file: Path,
+    target_format: str,
+    output_arg: Optional[str],
+    no_header: bool,
+    no_fix_encoding: bool,
+    delimiter: str,
+    select_columns: str,
+    deduplicate: bool,
+    sample_n: int,
+    sample_frac: float,
+    cast_specs: tuple,
+) -> None:
+    """Convert every file inside ZIP_FILE to a common format.
+
+    Returns a ZIP archive containing all converted files.  Files that
+    cannot be parsed are skipped; any errors are printed as warnings.
+
+    \b
+    Examples:
+        reparatio batch-convert monthly_reports.zip --format parquet
+        reparatio batch-convert raw_data.zip --format csv.gz -o processed.zip
+        reparatio batch-convert data.zip --format parquet --cast price=Float64
+    """
+    k = _require_key()
+    output_path = (
+        Path(output_arg) if output_arg else zip_file.parent / "converted.zip"
+    )
+
+    sel = json.dumps([c.strip() for c in select_columns.split(",") if c.strip()]) if select_columns else "[]"
+
+    cast_dict: dict = {}
+    for spec in cast_specs:
+        if "=" not in spec:
+            err.print(f"[red]Invalid --cast value:[/] {spec!r}  (expected COL=TYPE or COL=TYPE:FORMAT)")
+            sys.exit(1)
+        col_name, rest = spec.split("=", 1)
+        if ":" in rest:
+            typ, fmt = rest.split(":", 1)
+            cast_dict[col_name] = {"type": typ, "format": fmt}
+        else:
+            cast_dict[col_name] = {"type": rest}
+
+    written, errors_json = api_batch_convert(
+        k, zip_file, target_format, output_path,
+        no_header=no_header,
+        fix_encoding=not no_fix_encoding,
+        delimiter=delimiter,
+        select_columns=sel,
+        deduplicate=deduplicate,
+        sample_n=sample_n,
+        sample_frac=sample_frac,
+        cast_columns=json.dumps(cast_dict),
+    )
+    out.print(f"[green]Saved:[/] {written}")
+    if errors_json:
+        try:
+            import json as _json
+            for e in _json.loads(errors_json):
+                err.print(f"[yellow]Skipped[/] {e['file']}: {e['error']}")
+        except Exception:
+            err.print(f"[yellow]Errors:[/] {errors_json}")

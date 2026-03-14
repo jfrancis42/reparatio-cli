@@ -5,13 +5,13 @@ build-backend = "hatchling.build"
 [project]
 name = "reparatio-cli"
 version = "0.1.0"
-description = "Command-line tool for the Reparatio data conversion API"
+description = "Command-line tool for the Reparatio data conversion API (alpha)"
 readme = "README.md"
 requires-python = ">=3.9"
 license = { text = "MIT" }
 keywords = ["csv", "parquet", "excel", "data", "conversion", "cli"]
 classifiers = [
-    "Development Status :: 4 - Beta",
+    "Development Status :: 3 - Alpha",
     "Environment :: Console",
     "Intended Audience :: Developers",
     "Intended Audience :: End Users/Desktop",
@@ -36,6 +36,8 @@ reparatio = "reparatio_cli.cli:main"
 Homepage = "https://reparatio.app"
 Repository = "https://github.com/jfrancis42/reparatio-cli"
 "Bug Tracker" = "https://github.com/jfrancis42/reparatio-cli/issues"
+"MCP Server" = "https://github.com/jfrancis42/reparatio-mcp"
+"Python SDK" = "https://github.com/jfrancis42/reparatio-sdk"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/reparatio_cli"]

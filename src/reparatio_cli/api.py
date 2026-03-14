@@ -115,24 +115,30 @@ def api_convert(
     sample_n: int = 0,
     sample_frac: float = 0.0,
     geometry_column: str = "geometry",
+    cast_columns: str = "{}",
+    encoding_override: str = "",
 ) -> Tuple[Path, Optional[str]]:
     with _client(api_key) as c:
+        data: dict = {
+            "target_format": target_format,
+            "no_header": str(no_header).lower(),
+            "fix_encoding": str(fix_encoding).lower(),
+            "delimiter": delimiter,
+            "sheet": sheet,
+            "columns": columns,
+            "select_columns": select_columns,
+            "deduplicate": str(deduplicate).lower(),
+            "sample_n": str(sample_n),
+            "sample_frac": str(sample_frac),
+            "geometry_column": geometry_column,
+            "cast_columns": cast_columns,
+        }
+        if encoding_override:
+            data["encoding_override"] = encoding_override
         r = c.post(
             "/api/v1/convert",
             files={"file": (input_path.name, input_path.read_bytes())},
-            data={
-                "target_format": target_format,
-                "no_header": str(no_header).lower(),
-                "fix_encoding": str(fix_encoding).lower(),
-                "delimiter": delimiter,
-                "sheet": sheet,
-                "columns": columns,
-                "select_columns": select_columns,
-                "deduplicate": str(deduplicate).lower(),
-                "sample_n": str(sample_n),
-                "sample_frac": str(sample_frac),
-                "geometry_column": geometry_column,
-            },
+            data=data,
         )
     _raise(r)
     suggested = _filename_from_response(r, output_path.name)
@@ -141,6 +147,48 @@ def api_convert(
     output_path.write_bytes(r.content)
     warning = r.headers.get("x-reparatio-warning")
     return output_path, warning
+
+
+def api_batch_convert(
+    api_key: str,
+    zip_path: Path,
+    target_format: str,
+    output_path: Path,
+    *,
+    no_header: bool = False,
+    fix_encoding: bool = True,
+    delimiter: str = "",
+    select_columns: str = "[]",
+    deduplicate: bool = False,
+    sample_n: int = 0,
+    sample_frac: float = 0.0,
+    cast_columns: str = "{}",
+) -> Tuple[Path, Optional[str]]:
+    with _client(api_key) as c:
+        r = c.post(
+            "/api/v1/batch-convert",
+            files={"zip_file": (zip_path.name, zip_path.read_bytes())},
+            data={
+                "target_format": target_format,
+                "no_header": str(no_header).lower(),
+                "fix_encoding": str(fix_encoding).lower(),
+                "delimiter": delimiter,
+                "select_columns": select_columns,
+                "deduplicate": str(deduplicate).lower(),
+                "sample_n": str(sample_n),
+                "sample_frac": str(sample_frac),
+                "cast_columns": cast_columns,
+            },
+        )
+    _raise(r)
+    suggested = _filename_from_response(r, "converted.zip")
+    if output_path.is_dir():
+        output_path = output_path / suggested
+    output_path.write_bytes(r.content)
+    import urllib.parse as _up
+    raw_errors = r.headers.get("x-reparatio-errors")
+    errors = _up.unquote(raw_errors) if raw_errors else None
+    return output_path, errors
 
 
 def api_merge(
