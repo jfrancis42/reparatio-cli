@@ -116,6 +116,7 @@ def api_convert(
     sample_frac: float = 0.0,
     geometry_column: str = "geometry",
     cast_columns: str = "{}",
+    null_values: str = "[]",
     encoding_override: str = "",
 ) -> Tuple[Path, Optional[str]]:
     with _client(api_key) as c:
@@ -132,6 +133,7 @@ def api_convert(
             "sample_frac": str(sample_frac),
             "geometry_column": geometry_column,
             "cast_columns": cast_columns,
+            "null_values": null_values,
         }
         if encoding_override:
             data["encoding_override"] = encoding_override

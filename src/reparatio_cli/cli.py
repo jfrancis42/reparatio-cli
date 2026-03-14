@@ -230,8 +230,8 @@ def inspect(
 
 
 @main.command()
-@click.argument("input", "input_path", type=click.Path(exists=True, dir_okay=False, path_type=Path))
-@click.argument("output", "output_arg", required=False)
+@click.argument("input_path", metavar="INPUT", type=click.Path(exists=True, dir_okay=False, path_type=Path))
+@click.argument("output_arg", metavar="OUTPUT", required=False)
 @click.option("--format", "-f", "target_format", default="", help="Output format (inferred from OUTPUT extension if omitted).")
 @click.option("--no-header", is_flag=True)
 @click.option("--no-fix-encoding", is_flag=True)
