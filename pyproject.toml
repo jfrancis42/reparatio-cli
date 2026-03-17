@@ -7,6 +7,7 @@ name = "reparatio-cli"
 version = "0.1.0"
 description = "Command-line tool for the Reparatio data conversion API (alpha)"
 readme = "README.md"
+authors = [{ name = "Ordo Artificum LLC", email = "support@reparatio.app" }]
 requires-python = ">=3.9"
 license = { text = "MIT" }
 keywords = ["csv", "parquet", "excel", "data", "conversion", "cli"]
